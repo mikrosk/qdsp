@@ -84,7 +84,11 @@ START:	movea.l	4(sp),a6
 	move.l	12(a6),d0
 	add.l	20(a6),d0
 	add.l	28(a6),d0
-	addi.l	#256,d0
+	addi.l	#256+4096,d0			; basepage + stack size
+	move.l	a6,d1
+	add.l	d0,d1
+	and.b	#%11111100,d1			; long align
+	movea.l	d1,sp				; set new stack
 	Mshrink a6,d0
 	
 	lea	$80(a6),a6
@@ -4958,7 +4962,7 @@ asm_end:
 .sh:	cmp.b	#'.',-(a5)
 	bne.s	.sh
 	addq	#1,a5
-	move.l	#"P56 "&$ffffff00,(a5)+
+	move.l	#"p56 "&$ffffff00,(a5)+
 	
 ; Output the p56.
 	Fcreate	#savename_txt,#0
@@ -5002,7 +5006,7 @@ no_file:
 .sh:	cmp.b	#'.',-(a5)
 	bne.s	.sh
 	addq.w	#1,a5
-	move.l	#"LOD "&$ffffff00,(a5)+
+	move.l	#"lod "&$ffffff00,(a5)+
 	
 	Fcreate	#savename_txt,#0
 	tst.w	d0
