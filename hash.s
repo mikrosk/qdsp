@@ -170,7 +170,13 @@ Hash.add:
 	move.w	d0,.stringsize
 .redo:	bsr	Hash.calcKey			; d0.l=key
 	tst.w	Hash.wasFound
-	bne.s	.success
+	beq.s	.not_found
+; Replace data..
+	movea.l	Hash.tableAdr,a1
+	movea.l	(a1,d0.l*4),a1
+	move.l	d1,(a1)
+	bra.s	.success
+.not_found:
 	tst.l	d0
 	bmi	.null_string
 
@@ -215,7 +221,7 @@ Hash.add:
 	movea.l	a6,a0
 	move.w	.stringsize(pc),d0
 	tst.l	d2
-	beq.s	.redo
+	beq	.redo
 ; Error, rehashing failed.
 	movem.l	(sp)+,d2-d7/a1-a6
 	moveq	#Hash.REHASH_FAILED,d0

@@ -1,9 +1,8 @@
-;	QUICK DSP ASSEMBLER (v0.14)
+;	QUICK DSP ASSEMBLER (v0.13d)
 ;
 ;	by G.Audoly
 ;
 ;       revision by Pieter van der Meer
-;       0.14u revision by MiKRO, http://mikro.atari.org
 ;
 ; version that uses hash table (for labels), works quite a bit faster.
 ;
@@ -21,11 +20,12 @@
 QDSP:						; qdsp is in da house!
 
 	COMMENT	HEAD=%111
-	OPT	D-
+;	OPT	D-
 
-	OUTPUT	D:\QDSP_ASM.TTP
+	OUTPUT	H:\CODING\QDSP\QDSP013D.TTP
+;	OUTPUT	d:\CODING\QDSP\QDSP013D.TTP
 
-	bra.w	START
+	bra	START
 	INCLUDE	INCLUDE\GEMDOS.S
 	INCLUDE	HASH.S
 	TEXT
@@ -89,10 +89,10 @@ START:	movea.l	4(sp),a6
 	
 	lea	$80(a6),a6
 	clr.w	d7
-	move.b	(a6)+,d7			; d7.w = #characters
-	bne.b	.cmdline_filled
+	move.b	(a6)+,d7			; d7.w=#chars in cmdline
+	bne.s	.cmdline_filled
 	Cconws2	usage_txt(pc)
-	bra.w	fin
+	bra	fin
 
 .cmdline_filled:
 	clr.l	source
@@ -111,8 +111,13 @@ START:	movea.l	4(sp),a6
 	move.l	(a0)+,errors_adr
 	movea.l	(a0)+,a6			; a6: cmdline
 
-not_kitdsp:
+;---------------------------------------------------------------------------
 
+	ifne	1
+
+; mikro's commandline parser.
+
+not_kitdsp:
 ; a6  : commandline
 ; d7.w: #characters
 
@@ -212,6 +217,114 @@ copy_filename:
 		bra.w	fin
 .end_set_path:
 
+	else
+
+; old commandline parser.
+
+not_kitdsp:
+; a6: commandline
+
+; Get size of cmdline..
+	movea.l	a6,a5
+.count:	tst.b	(a5)+
+	bne.s	.count
+	suba.l	a6,a5
+	move.w	a5,d7				; d7.w=cmdline size
+.find_filename:
+	move.w	d7,d5
+	subq.w	#1,d7
+	movea.l	a6,a4
+	moveq	#-1,d6
+.nospace:
+	cmpi.b	#" ",(a6)+
+	dbeq	d7,.nospace
+	tst.w	d7
+	bmi.s	.spaces_parsed
+	move.w	d7,d6				; d7<0, means no space found
+	bra.s	.nospace
+.spaces_parsed:
+	tst.w	d6
+	bmi.s	.no_options
+	sub.w	d6,d5
+	lea	(a4,d5.w),a6
+	bra.s	.end_find_filename
+; only one word, so it's the filename and no options..
+.no_options:
+	movea.l	a4,a6				; filename
+	tst.b	m_opt
+	beq	opt_end				; only one word and no dspdit -> this means no options! 
+.end_find_filename:
+; d5.w=options size
+; a4: options (null terminated)
+; a6: source filename (possibly ;))
+
+options:subq.w	#1,d5
+	beq.s	opt_end
+	move.b	(a4)+,d0
+	beq.s	opt_end
+	cmp.b	#' ',d0
+	beq.s	options
+	cmp.b	#'-',d0
+	beq.s	options
+	or.b	#$20,d0
+opt_o:	cmp.b	#'o',d0
+	bne.s	opt_l
+	tst.b	m_opt
+	beq	opt_end				; no dspdit -> don't modify filename addy!
+	move.l	a4,a6				; we definitely found the source filename!
+.sh:	tst.b	(a4)
+	beq.s	opt_end
+	cmp.b	#' ',(a4)+
+	bne.s	.sh
+	subq.w	#1,a4
+	bra.s	options
+
+opt_l:	cmp.b	#'l',d0
+	bne.s	opt_n
+	st.b	l_opt
+	bra.s	options
+	
+opt_n:	cmp.b	#'n',d0
+	bne.s	opt_w
+	st.b	n_opt
+	bra.s	options
+
+opt_w:	cmpi.b	#'w',d0
+	bne.s	opt_
+	st.b	w_opt
+	bra.s	options
+
+opt_:	bra.s	options
+opt_end:
+
+; copy filename and store it's address
+; a6: filename
+	lea	savename_txt(pc),a0
+	move.l	a0,filename_adr
+	move.l	a0,a1
+.copyname_loop:
+	move.b	(a6)+,d0
+	cmpi.b	#" ",d0
+	beq.s	.end_copy
+	move.b	d0,(a0)+
+	bne.s	.copyname_loop
+.end_copy:
+	clr.b	(a0)
+
+; set the filepath using the filename
+	move.l	a4,-(sp)
+	bsr	SET_FILEPATH
+	movea.l	(sp)+,a4
+	tst.l	d0
+	bpl.s	.end_set_path
+	Cconws2	usage_txt(pc)
+	bra	fin
+.end_set_path:
+
+	endc
+
+;---------------------------------------------------------------------------
+
 * Allocate memory for label-table.
 	Malloc	#page_size+4
 	tst.l	d0
@@ -223,11 +336,11 @@ copy_filename:
 	move.l	lbl_pt(pc),lbl
 	subq.l	#4,lbl
 	move.l	#lbl_pt,lbl_pt0
-	move.w	#page_size/4,d7
+	move.w	#page_size/4-1,d7
 	moveq	#0,d0
 .clrloop:
 	move.l	d0,(a0)+
-	dbra	d7,.clrloop
+	dbf	d7,.clrloop
 
 * Allocate memory for macro-table.
 	Malloc	#page_size+4
@@ -280,8 +393,7 @@ asm_newfile:
 	tst.b	pass(pc)
 	bne.s	.pass2
 	move.l	a6,-(sp)			* Save destination.
-	movea.l	filename_adr,a6
-* a6: filename
+	movea.l	filename_adr,a6			* a6: filename
 	movea.l	source(pc),a5
 	move.l	a6,afich
 	move.l	a6,-(sp)
@@ -627,10 +739,14 @@ equ:
 	bge.s	.br2
 .err:	error2	terr_val(pc)
 	bra	ins_end
-.br2:	move.l	d6,d1
-	swap	d1
-	move.w	#equtype<<8,d1
-	swap	d1				; d1.l=data
+.br2:
+	move.l	#equtype<<24,d1
+	or.l	d6,d1
+;	move.l	d6,d1
+;	swap	d1
+;	move.w	#equtype<<8,d1
+;	swap	d1				; d1.l=data
+
 	lea	lbel(pc),a0			; a0: search string
 	bsr	addString0
 	tst.l	d0
@@ -1347,9 +1463,6 @@ jscc:	move.w	(a5),d0
 	subq.w	#1,a5
 	move.l	a5,a0
 	bsr	ea
-	tst.w	d0
-	blt	err_op
-	
 	ext.w	d0
 	addq.w	#1,apc+2
 	move.b	#$b,(a6)+
@@ -1360,8 +1473,7 @@ jscc:	move.w	(a5),d0
 	beq.s	jsshort1
 	cmp.w	#$40,d0
 	blt.s	jsshort0
-jslong0:
-	tst.w	d2
+jslong0:tst.w	d2
 	beq.s	.ici
 	cmp.w	apc+2(pc),d6
 	bhi.s	.ici0
@@ -1388,8 +1500,7 @@ jsshort0:
 	move.b	#$70,d0
 	moveq	#-1,d2
 	bra.s	jslong0
-jsshort:	
-	move.b	#$f,-3(a6)
+jsshort:move.b	#$f,-3(a6)
 	lsl.b	#4,d4
 	ror.w	#8,d0
 	or.b	d0,d4
@@ -4446,28 +4557,7 @@ get_srcreg:
 	bne.s	.notthis
 	addq.w	#1,a1
 	bra.s	.next_one
-.found:	move.b	-2(a1),d0
-	cmpi.b	#'r',d0
-	bne.s	.chk_n
-	move.b	-1(a1),d0
-	subi.b	#'0',d0
-	IFNE	WARNSTALL
-	btst	d0,userx_tbl+1(pc)		* Check if rx value set in last inst.
-	beq.s	.nostallr
-	bsr	warn_rnmstall
-.nostallr:
-	ENDC
-	bra.s	.rest
-.chk_n:	cmpi.b	#'n',d0
-	bne.s	.rest
-	move.b	-1(a1),d0
-	subi.b	#'0',d0
-	IFNE	WARNSTALL
-	btst	d0,usenx_tbl+1(pc)		* Check if nx value set in last inst.
-	beq.s	.nostalln
-	bsr	warn_rnmstall
-.nostalln:
-	ENDC
+.found:
 .rest:	move.l	a0,a5
 	moveq	#0,d0
 	move.b	1(a1),d0
@@ -4860,29 +4950,16 @@ asm_end:
 	tst.w	nb_err(pc)
 	bne	no_file
 	lea	savename_txt(pc),a5
-
-;.shend:	move.b	(a5)+,d0
-;	beq.s	.end
-;	cmp.b	#' ',d0
-;	bne.s	.shend
-;.end:
-;.sh:	cmp.b	#'.',-(a5)
-;	bne.s	.sh
-;	addq	#1,a5
-;	move.l	#"P56 "&$ffffff00,(a5)+
-
-.next_char:	move.b	(a5)+,d0
-		beq.b	.no_char
-		cmpi.b	#'.',d0
-		beq.b	.dot_found
-		cmpi.b	#' ',d0
-		bne.b	.next_char
-		
-.no_char:	subq.l	#1,a5
-		move.b	#'.',(a5)+
-
-.dot_found:	move.l	#'P56 '&$ffffff00,(a5)+		; EXT + NULL
-
+.shend:	move.b	(a5)+,d0
+	beq.s	.end
+	cmp.b	#' ',d0
+	bne.s	.shend
+.end:
+.sh:	cmp.b	#'.',-(a5)
+	bne.s	.sh
+	addq	#1,a5
+	move.l	#"P56 "&$ffffff00,(a5)+
+	
 ; Output the p56.
 	Fcreate	#savename_txt,#0
 	tst.w	d0
@@ -4917,28 +4994,15 @@ no_file:
 ; Output lod.
 	bsr	make_lod
 	lea	savename_txt(pc),a5
-
-;.shend:	move.b	(a5)+,d0
-;	beq.s	.end
-;	cmp.b	#' ',d0
-;	bne.s	.shend
-;.end:
-;.sh:	cmp.b	#'.',-(a5)
-;	bne.s	.sh
-;	addq.w	#1,a5
-;	move.l	#"LOD "&$ffffff00,(a5)+
-
-.next_char:	move.b	(a5)+,d0
-		beq.b	.no_char
-		cmpi.b	#'.',d0
-		beq.b	.dot_found
-		cmpi.b	#' ',d0
-		bne.b	.next_char
-		
-.no_char:	subq.l	#1,a5
-		move.b	#'.',(a5)+
-
-.dot_found:	move.l	#'LOD '&$ffffff00,(a5)+		; EXT + NULL
+.shend:	move.b	(a5)+,d0
+	beq.s	.end
+	cmp.b	#' ',d0
+	bne.s	.shend
+.end:
+.sh:	cmp.b	#'.',-(a5)
+	bne.s	.sh
+	addq.w	#1,a5
+	move.l	#"LOD "&$ffffff00,(a5)+
 	
 	Fcreate	#savename_txt,#0
 	tst.w	d0
@@ -4989,6 +5053,10 @@ fini0:	move.b	m_opt(pc),d0
 	move.w	#7,-(sp)
 	trap	#1
 	addq	#2,sp
+;	move.w	#2,-(sp)
+;	move.w	#2,-(sp)
+;	trap	#13
+;	addq	#4,sp
 .dontwait:
 	Pterm	#0
 
@@ -5550,7 +5618,7 @@ not_val:movem.l	d6/a0-a2,-(sp)
 	tst.w	Hash.wasFound(pc)
 	beq.s	.oops
 
-	andi.l	#$00FFFFFF,d5				; todo!! whatda fak, clear labeltype
+	andi.l	#$00FFFFFF,d5			; Clear labeltype.
 
 	moveq	#0,d0
 	move.l	(sp)+,a5
@@ -5703,8 +5771,7 @@ make_lod:
 ; Put in DATA-blocks.	
 	move.l	dest(pc),a0
 	move.w	4(a0),first_sec
-new_sec:	
-	pea.l	tdata(pc)
+new_sec:pea.l	tdata(pc)
 	bsr.s	mkc
 	addq.w	#2,a0
 	move.b	(a0)+,d0
@@ -5755,9 +5822,9 @@ new_val:move.b	(a0)+,d6
 putpsymbol:
 	movea.l	Hash.bufferAdr,a0
 	movea.l	Hash.nextStringAdr,a6
+.firstloop:
 	cmpa.l	a0,a6
 	beq.s	.end_p_symbol
-.firstloop:
 	tst.b	(a0)
 	beq.s	.found
 	movea.l	a0,a1
@@ -5795,9 +5862,9 @@ putpsymbol:
 putxsymbol:
 	movea.l	Hash.bufferAdr,a0
 	movea.l	Hash.nextStringAdr,a6
+.firstloop:
 	cmpa.l	a0,a6
 	beq.s	.end_x_symbol
-.firstloop:
 	cmpi.b	#xmemtype,(a0)
 	beq.s	.found
 	movea.l	a0,a1
@@ -5835,9 +5902,9 @@ putxsymbol:
 putysymbol:
 	movea.l	Hash.bufferAdr,a0
 	movea.l	Hash.nextStringAdr,a6
+.firstloop:
 	cmpa.l	a0,a6
 	beq.s	.end_y_symbol
-.firstloop:
 	cmpi.b	#ymemtype,(a0)
 	beq.s	.found
 	movea.l	a0,a1
@@ -5891,9 +5958,12 @@ SET_FILEPATH:
 	beq.s	.pathset
 	cmpi.b	#" ",d0
 	beq.s	.pathset
+	cmpi.b	#"/",d0
+	beq.s	.sep_found
 	cmpi.b	#"\",d0
 	bne.s	.floop
 
+.sep_found:
 	movea.l	a1,a2
 	lea	.pathname_txt,a0
 .copyloop:
@@ -5906,8 +5976,12 @@ SET_FILEPATH:
 .end_copyloop:	
 
 .backtrack_loop:
-	cmpi.b	#"\",-(a0)
+	move.b	-(a0),d0
+	cmpi.b	#"/",d0
+	beq.s	.sep_found2
+	cmpi.b	#"\",d0
 	bne.s	.backtrack_loop
+.sep_found2:
 	clr.b	(a0)
 
 	cmpi.b	#":",1(a1)
@@ -5917,14 +5991,14 @@ SET_FILEPATH:
 	subi.w	#"A",d0
 	bpl.s	.on
 	addq	#4,sp
-	bra	.error
+	bra.s	.error
 
 .on:	pea	.pathname_txt+2
 
 	move.w	d0,-(sp)			* Dsetdrive
 	move.w	#$e,-(sp)
 	trap	#1
-	addq.w	#4,sp
+	addq	#4,sp
 	
 	movea.l	(sp)+,a0
 .nodrive:
@@ -5932,7 +6006,7 @@ SET_FILEPATH:
 	move.l	a0,-(sp)
 	move.w	#$3b,-(sp)
 	trap	#1
-	addq.w	#6,sp
+	addq	#6,sp
 	tst.l	d0
 	bmi.s	.error
 .pathset:
@@ -6000,21 +6074,19 @@ load:	;*fname.L
 	
 usage_txt:
 	dc.b	"Usage:",13,10
-	dc.b	"QDSP_ASM.TTP [n] [l] [w] [oOUTNAME] FILE.ASM",13,10
+	dc.b	"QDSP_ASM.TTP [n] [l] [w] [oFILE.P56] [pFILE] FILE.ASM",13,10
 	dc.b	13,10
 	dc.b	"example:",13,10
-	dc.b	"l otest test.asm",13,10
+	dc.b	"l otest.p56 test.asm",13,10
 	dc.b	13,10
 	dc.b	"n:        Don't create '.P56' output file",13,10
 	dc.b	"l:        Make a LOD output file as well",13,10
-	dc.b	"oOUTNAME: Define an other name for output file",13,10
+	dc.b	"oFILE.P56 Define an other name for output file (don't forget the extension)",13,10
 	dc.b	"w:        Wait for additional keypress",13,10
 	dc.b	0
-t_intro:
-	dc.b	13,"Quick DSP assembler by G.Audoly. (oct 95)",13,10
+t_intro:dc.b	13,"Quick DSP assembler by G.Audoly. (oct 95)",13,10
 	dc.b	"All rights reserved to G.Audoly, A.Settelmeier, and A.John",13,10
-	dc.b	"v0.13b: Additions by Pieter van der Meer (2003)",13,10
-	dc.b	"v0.14u: Some fixes by MiKRO (05/2003)",13,10
+	dc.b	"v0.13d: Additions by Pieter van der Meer (2004)",13,10
 	dc.b	10,0
 presskey_txt
 	dc.b	"Press any key to exit.",13,10,0
@@ -6142,7 +6214,7 @@ tpass:	dc.b	13,"(pass "
 tpass0:	dc.b	"1)",13,10,0
 
 tstart:	dc.b	"_START ",0
-tname:	dc.b	" 0000 0000 0000  - QUICK DSP ASSEMBLER V0.13b -",13,10,0
+tname:	dc.b	" 0000 0000 0000  - QUICK DSP ASSEMBLER V0.13d -",13,10,0
 tdata:	dc.b	13,10,"_DATA ",0
 tend:	dc.b	"_END ",0
 psymbol_txt:
@@ -6348,8 +6420,8 @@ struct_adr:
 	ds.l	1
 pass:	ds.w	1
 
-lbel:	ds.l	80/4
-lbel0:	ds.l	80/4
+lbel:	ds.b	80
+lbel0:	ds.b	80
 lbl:	ds.l	1
 lbl0:	ds.l	1
 lbl_nb:	ds.l	1
@@ -6411,3 +6483,18 @@ sourcefilestackdepth:
 	ds.w	1
 
 	END
+
+;page:
+;adr size  ?
+;  0    4  next page (0=last one)
+;  4 pg_sz datas
+
+;labels:
+;
+;adr size  ?
+;  0    4  next
+;  4    n  string
+; 4+n   8  value  (abs.L ou dec.L) or (adr.L)
+
+; 6+n   4  next
+;...

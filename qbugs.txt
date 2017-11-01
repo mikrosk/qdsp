@@ -1,0 +1,65 @@
+Hi,
+
+I have a problem... my DSP program is getting too big so it overwrites
+X:memory... so, I changed some stuff and moved the X:memory:
+
+First it was:
+	ORG X:$0
+Now it is:
+	ORG X:$40
+
+but I get alot of errors, strange errors like labels missing in the
+program!? What has program labels got to do with X:mem!? hmm
+
+I need more P:memory and I thought move the X ORG would help.
+Maybe you know more about this?
+
+>>> I dunno. Tested this a bit, but I need the source to figure it out.
+
+Oki, now I get no errors when asembling in Qasm but it refuese to work...
+it just hangs.
+Anyway, here are 3 more "bugs"
+
+tmi	x0,b	(not sure but I think this was it)
+
+>>> Tested and it works correctly. No bug here.
+
+Labels can be double:
+
+label:	move	whatever
+label:	move	whatever
+^^^^^^^^^^^^^^^^^^^^^^^^^ no errors when compiling...
+
+>>> Ayee! You're right! I fixed it now. Tested it with some selfmade sources
+>>> and EXA's amongst others. Seems to work ok. Please tell me if it still
+>>> doesn't work as it should.
+
+Labels cannot contain the register symbols:
+
+Label_R0
+
+>>> Tested this and it seems "Label_R0" can exist, while "R0_Label" can't!
+>>> I fixed it, but still there could be some bugs concerning this. Please
+>>> let me know if it freaks out again!
+
+Ok, this is just small bugs and I dont care if you fix them, just thought
+I let you know... :)
+
+Hi, Im finally trying to get my asources to work in Qasm.. :)
+I found something I think is a bug, I think this is all you need to know:
+
+	rep	#label2-label1
+	move	whatever
+
+	ORG	X:0
+label1	ds	1
+lebel2
+
+>>> Mmmhhh.. You seem to have used a "lEbel2" instead of a "lAbel2". Did this
+>>> perhaps cause an error? I'll get on it right now to see...
+>>> OH NO! You're right again! It seems you are forced to use "<" in front of
+>>> the number since rep can only use short immediate-data!!
+>>> I've now corrected this! Works fine now! =)
+
+>>> Hope you like the new fixed version. Please STay in touch to report any
+>>> new bugs to me. Work on new features will start soon.
