@@ -20,14 +20,13 @@
 QDSP:						; qdsp is in da house!
 
 	COMMENT	HEAD=%111
-;	OPT	D-
+	OPT	D-
 
-	OUTPUT	H:\CODING\QDSP\QDSP013D.TTP
-;	OUTPUT	d:\CODING\QDSP\QDSP013D.TTP
+	OUTPUT	.ttp
 
 	bra	START
-	INCLUDE	INCLUDE\GEMDOS.S
-	INCLUDE	HASH.S
+	INCLUDE	include/gemdos.s
+	INCLUDE	hash.s
 	TEXT
 
 ******** GLOBAL EQUATES ********
@@ -6376,7 +6375,7 @@ cc:	dc.b	"cc",0
 	dc.b	"es",13
 	dc.b	"ls",14
 	dc.b	"le",15
-	dc.w	0
+	dc.b	0,0
 
 	EVEN
 	
