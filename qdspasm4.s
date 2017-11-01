@@ -1,8 +1,9 @@
-;	QUICK DSP ASSEMBLER (v0.13b)
+;	QUICK DSP ASSEMBLER (v0.14)
 ;
 ;	by G.Audoly
 ;
 ;       revision by Pieter van der Meer
+;       0.14u revision by MiKRO, http://mikro.atari.org
 ;
 ; version that uses hash table (for labels), works quite a bit faster.
 ;
@@ -22,9 +23,9 @@ QDSP:						; qdsp is in da house!
 	COMMENT	HEAD=%111
 	OPT	D-
 
-	OUTPUT	H:\CODING\QDSP\QDSP013B.TTP
+	OUTPUT	D:\QDSP_ASM.TTP
 
-	bra	START
+	bra.w	START
 	INCLUDE	INCLUDE\GEMDOS.S
 	INCLUDE	HASH.S
 	TEXT
@@ -87,10 +88,11 @@ START:	movea.l	4(sp),a6
 	Mshrink a6,d0
 	
 	lea	$80(a6),a6
-	tst.b	(a6)+				; d7.w=#chars in cmdline
-	bne.s	.cmdline_filled
+	clr.w	d7
+	move.b	(a6)+,d7			; d7.w = #characters
+	bne.b	.cmdline_filled
 	Cconws2	usage_txt(pc)
-	bra	fin
+	bra.w	fin
 
 .cmdline_filled:
 	clr.l	source
@@ -109,118 +111,105 @@ START:	movea.l	4(sp),a6
 	move.l	(a0)+,errors_adr
 	movea.l	(a0)+,a6			; a6: cmdline
 
-; test messages, disabled..
-	IFNE	0
-	move.l	a6,d0
-	lea	shit(pc),a0
-	bsr	long2hex
-	move.w	#$0D0A,(a0)+
-	clr.b	(a0)+
-	Cconws2	shit(pc)			; test
-	movea.l	source(pc),a0
-	Cconws2	(a0)
-	move.l	#$0A0D0000,shit
-	Cconws2	shit(pc)
-	ENDC
-
 not_kitdsp:
-; a6: commandline
 
-; Get size of cmdline..
-	movea.l	a6,a5
-.count:	tst.b	(a5)+
-	bne.s	.count
-	suba.l	a6,a5
-	move.w	a5,d7				; d7.w=cmdline size
-.find_filename:
-	move.w	d7,d5
-	subq.w	#1,d7
-	movea.l	a6,a4
-	moveq	#-1,d6
-.nospace:
-	cmpi.b	#" ",(a6)+
-	dbeq	d7,.nospace
-	tst.w	d7
-	bmi.s	.spaces_parsed
-	move.w	d7,d6				; d7<0, means no space found
-	bra.s	.nospace
-.spaces_parsed:
-	tst.w	d6
-	bmi.s	.no_options
-	sub.w	d6,d5
-	lea	(a4,d5.w),a6
-	bra.s	.end_find_filename
-; only one word, so it's the filename and no options..
-.no_options:
-	movea.l	a4,a6				; filename
-	tst.b	m_opt
-	beq	opt_end				; only one word and no dspdit -> this means no options! 
-.end_find_filename:
-; d5.w=options size
-; a4: options (null terminated)
-; a6: source filename (possibly ;))
+; a6  : commandline
+; d7.w: #characters
 
-options:subq.w	#1,d5
-	beq.s	opt_end
-	move.b	(a4)+,d0
-	beq.s	opt_end
-	cmp.b	#' ',d0
-	beq.s	options
-	cmp.b	#'-',d0
-	beq.s	options
-	or.b	#$20,d0
-opt_o:	cmp.b	#'o',d0
-	bne.s	opt_l
-	tst.b	m_opt
-	beq	opt_end				; no dspdit -> don't modify filename addy!
-	move.l	a4,a6				; we definitely found the source filename!
-.sh:	tst.b	(a4)
-	beq.s	opt_end
-	cmp.b	#' ',(a4)+
-	bne.s	.sh
-	subq.w	#1,a4
-	bra.s	options
+		subq.w	#1,d7				; dbra
+		move.w	d7,d6				; backup
+		movea.l	a6,a5				; backup
+		suba.l	a4,a4				; clr.l a4
+		
+		cmpi.b	#' ',(a6)
+		bne.b	.nospace
+		Cconws2	usage_txt(pc)			; 1st char cannot be a space
+		bra.w	fin
+		
+.nospace:	cmpi.b	#' ',(a5)+
+		dbeq	d7,.nospace
+		tst.w	d7
+		bpl.b	more_args
+		bra.w	copy_filename			; a6: 1st arg = filename
+		
+more_args:	move.b	(a6)+,d5			; min 2 arguments
 
-opt_l:	cmp.b	#'l',d0
-	bne.s	opt_n
-	st.b	l_opt
-	bra.s	options
-	
-opt_n:	cmp.b	#'n',d0
-	bne.s	opt_w
-	st.b	n_opt
-	bra.s	options
+		beq.b	.end_loop			; NULL (possible?)
 
-opt_w:	cmpi.b	#'w',d0
-	bne.s	opt_
-	st.b	w_opt
-	bra.s	options
+		cmpi.b	#' ',d5
+		beq.b	.end_loop
+		
+		cmpi.b	#'-',d5
+		beq.b	.end_loop
 
-opt_:	bra.s	options
-opt_end:
+.opt_n:		cmpi.b	#'n',d5
+		bne.b	.opt_l
+		st	n_opt
+		bra.b	.end_loop
+		
+.opt_l:		cmpi.b	#'l',d5
+		bne.b	.opt_w
+		st	l_opt
+		bra.b	.end_loop
+		
+.opt_w:		cmpi.b	#'w',d5
+		bne.b	.opt_o
+		st	w_opt
+		bra.b	.end_loop
+		
+.opt_o:		cmpi.b	#'o',d5
+		bne.b	.filename
+		movea.l	a6,a4				; a4: DESTINATION name
+		tst.b	m_opt
+		bne.b	copy_filename			; 0 = no set
+		
+.next_char:	move.b	(a6)+,d5
+		cmpi.b	#' ',d5
+		bne.b	.next_char
+		bra.b	.end_loop
+				
+.filename:	subq.l	#1,a6
+		bra.b	copy_filename			; a6: SOURCE (last arg)
+		
+.end_loop:	dbra	d6,more_args
+		Cconws2	usage_txt(pc)			; for sure ;)
+		bra.w	fin				;
+
+copy_filename:
 
 ; copy filename and store it's address
-; a6: filename
-	lea	savename_txt(pc),a0
-	move.l	a0,filename_adr
-	move.l	a0,a1
-.copyname_loop:
-	move.b	(a6)+,d0
-	cmpi.b	#" ",d0
-	beq.s	.end_copy
-	move.b	d0,(a0)+
-	bne.s	.copyname_loop
-.end_copy:
-	clr.b	(a0)
+; a4: destination (NULL is the same as SOURCE)
+; a6: source (NULL/space terminated)
 
+		lea	savename_txt(pc),a0
+		
+		move.l	a4,d0
+		beq.b	.no_dest
+		movea.l	a4,a5				; for copy loop
+		bra.b	.skip
+		
+.no_dest:	movea.l	a6,a5
+
+.skip:		movea.l	a6,a1				; for loading
+		move.l	a6,filename_adr			; (SET_FILEPATH)
+
+.copy:		move.b	(a5)+,d0			; sets dest name
+		cmpi.b	#" ",d0
+		beq.b	.end_copy
+		tst.b	d0
+		beq.b	.end_copy
+		move.b	d0,(a0)+
+		bne.b	.copy
+.end_copy:	clr.b	(a0)				; NULL termination
+		
 ; set the filepath using the filename
-	move.l	a4,-(sp)
-	bsr	SET_FILEPATH
-	movea.l	(sp)+,a4
-	tst.l	d0
-	bpl.s	.end_set_path
-	Cconws2	usage_txt(pc)
-	bra	fin
+; a1: source name (NULL/space terminated)
+
+		bsr.w	SET_FILEPATH
+		tst.l	d0
+		bpl.b	.end_set_path
+		Cconws2	usage_txt(pc)
+		bra.w	fin
 .end_set_path:
 
 * Allocate memory for label-table.
@@ -4871,16 +4860,29 @@ asm_end:
 	tst.w	nb_err(pc)
 	bne	no_file
 	lea	savename_txt(pc),a5
-.shend:	move.b	(a5)+,d0
-	beq.s	.end
-	cmp.b	#' ',d0
-	bne.s	.shend
-.end:
-.sh:	cmp.b	#'.',-(a5)
-	bne.s	.sh
-	addq	#1,a5
-	move.l	#"P56 "&$ffffff00,(a5)+
-	
+
+;.shend:	move.b	(a5)+,d0
+;	beq.s	.end
+;	cmp.b	#' ',d0
+;	bne.s	.shend
+;.end:
+;.sh:	cmp.b	#'.',-(a5)
+;	bne.s	.sh
+;	addq	#1,a5
+;	move.l	#"P56 "&$ffffff00,(a5)+
+
+.next_char:	move.b	(a5)+,d0
+		beq.b	.no_char
+		cmpi.b	#'.',d0
+		beq.b	.dot_found
+		cmpi.b	#' ',d0
+		bne.b	.next_char
+		
+.no_char:	subq.l	#1,a5
+		move.b	#'.',(a5)+
+
+.dot_found:	move.l	#'P56 '&$ffffff00,(a5)+		; EXT + NULL
+
 ; Output the p56.
 	Fcreate	#savename_txt,#0
 	tst.w	d0
@@ -4915,15 +4917,28 @@ no_file:
 ; Output lod.
 	bsr	make_lod
 	lea	savename_txt(pc),a5
-.shend:	move.b	(a5)+,d0
-	beq.s	.end
-	cmp.b	#' ',d0
-	bne.s	.shend
-.end:
-.sh:	cmp.b	#'.',-(a5)
-	bne.s	.sh
-	addq.w	#1,a5
-	move.l	#"LOD "&$ffffff00,(a5)+
+
+;.shend:	move.b	(a5)+,d0
+;	beq.s	.end
+;	cmp.b	#' ',d0
+;	bne.s	.shend
+;.end:
+;.sh:	cmp.b	#'.',-(a5)
+;	bne.s	.sh
+;	addq.w	#1,a5
+;	move.l	#"LOD "&$ffffff00,(a5)+
+
+.next_char:	move.b	(a5)+,d0
+		beq.b	.no_char
+		cmpi.b	#'.',d0
+		beq.b	.dot_found
+		cmpi.b	#' ',d0
+		bne.b	.next_char
+		
+.no_char:	subq.l	#1,a5
+		move.b	#'.',(a5)+
+
+.dot_found:	move.l	#'LOD '&$ffffff00,(a5)+		; EXT + NULL
 	
 	Fcreate	#savename_txt,#0
 	tst.w	d0
@@ -4974,10 +4989,6 @@ fini0:	move.b	m_opt(pc),d0
 	move.w	#7,-(sp)
 	trap	#1
 	addq	#2,sp
-;	move.w	#2,-(sp)
-;	move.w	#2,-(sp)
-;	trap	#13
-;	addq	#4,sp
 .dontwait:
 	Pterm	#0
 
@@ -5989,20 +6000,21 @@ load:	;*fname.L
 	
 usage_txt:
 	dc.b	"Usage:",13,10
-	dc.b	"QDSP_ASM.TTP [n] [l] [w] [oFILE.P56] [pFILE] FILE.ASM",13,10
+	dc.b	"QDSP_ASM.TTP [n] [l] [w] [oOUTNAME] FILE.ASM",13,10
 	dc.b	13,10
 	dc.b	"example:",13,10
-	dc.b	"l otest.p56 test.asm",13,10
+	dc.b	"l otest test.asm",13,10
 	dc.b	13,10
 	dc.b	"n:        Don't create '.P56' output file",13,10
 	dc.b	"l:        Make a LOD output file as well",13,10
-	dc.b	"oFILE.P56 Define an other name for output file (don't forget the extension)",13,10
+	dc.b	"oOUTNAME: Define an other name for output file",13,10
 	dc.b	"w:        Wait for additional keypress",13,10
 	dc.b	0
 t_intro:
 	dc.b	13,"Quick DSP assembler by G.Audoly. (oct 95)",13,10
 	dc.b	"All rights reserved to G.Audoly, A.Settelmeier, and A.John",13,10
 	dc.b	"v0.13b: Additions by Pieter van der Meer (2003)",13,10
+	dc.b	"v0.14u: Some fixes by MiKRO (05/2003)",13,10
 	dc.b	10,0
 presskey_txt
 	dc.b	"Press any key to exit.",13,10,0
@@ -6290,9 +6302,6 @@ cc:	dc.b	"cc",0
 	dc.b	"le",15
 	dc.w	0
 
-;p56active_txt:
-;	dc.b	"p56 active",$A,$D,0
-
 	EVEN
 	
 dest0:	dc.l	dest0+3
@@ -6402,18 +6411,3 @@ sourcefilestackdepth:
 	ds.w	1
 
 	END
-
-;page:
-;adr size  ?
-;  0    4  next page (0=last one)
-;  4 pg_sz datas
-
-;labels:
-;
-;adr size  ?
-;  0    4  next
-;  4    n  string
-; 4+n   8  value  (abs.L ou dec.L) or (adr.L)
-
-; 6+n   4  next
-;...

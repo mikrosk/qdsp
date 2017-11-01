@@ -101,3 +101,13 @@ v0.13b: May 5th 2003:
 * Labels are now handled with a hashtable. This speeds up quite alot.
 * R:Y parallel move with absolute address was handled wrong. The second word
   wasn't output. Now corrected. Hi Mikro!
+
+v0.14u: May 20th 2003: [unofficial release by MiKRO]
+* 100% cooperation with DSPDit. For example .LOD handling wasn't correct
+* Multiple options bug fixed (qdsp_asm.ttp w l prg.asm works correctly now)
+ (this bug seems to be only in 0.13b release)
+* removed bug in -o option: you can input only basename, no need to 
+  extension (which wasn't used at all - .p56 and .lod is added manually)
+* removed p-option handling (in fact I removed only text message, probably 
+  only planned feature?)
+* Some changes in i/o handling (should be more safe now)
