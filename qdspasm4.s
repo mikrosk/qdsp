@@ -6089,7 +6089,8 @@ usage_txt:
 	dc.b	0
 t_intro:dc.b	13,"Quick DSP assembler by G.Audoly. (oct 95)",13,10
 	dc.b	"All rights reserved to G.Audoly, A.Settelmeier, and A.John",13,10
-	dc.b	"v0.13d: Additions by Pieter van der Meer (2004)",13,10
+	dc.b	"Additions by Pieter van der Meer (1998-2004)",13,10
+	dc.b	"v0.13e: Further fixes by Miro Kropacek (2013)",13,10
 	dc.b	10,0
 presskey_txt
 	dc.b	"Press any key to exit.",13,10,0
